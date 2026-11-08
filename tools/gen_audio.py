@@ -1,7 +1,7 @@
 """Genera audio en inglés con Kokoro-82M (Apache-2.0) para toda la app.
 Uso: python3 tools/gen_audio.py DIR_KOKORO   (DIR con onnx/model.onnx y voices/af_heart.bin, voices/am_michael.bin)
 Requiere: pip install kokoro-onnx onnxruntime ; ffmpeg y node en el PATH.
-Crea audio/*.mp3 y audio.js (mapa texto -> archivo)."""
+Crea audio/*.mp3, audio.js (mapa texto -> archivo) e ipa.js (palabra -> pronunciación IPA)."""
 import sys, json, re, hashlib, subprocess, wave, os, tempfile
 import numpy as np, onnxruntime as ort
 from kokoro_onnx.tokenizer import Tokenizer
@@ -52,3 +52,10 @@ for i, (k, (t, v)) in enumerate(sorted(texts.items())):
     if i % 50 == 0: print(i, len(texts), flush=True)
 open(os.path.join(root, 'audio.js'), 'w', encoding='utf-8').write('window.AUDIO=' + json.dumps(mapping, ensure_ascii=False, separators=(',', ':')) + ';\n')
 print('done', len(mapping))
+
+# Pronunciación IPA de cada palabra de los libros
+words = sorted({k for k in texts if ' ' not in k and re.fullmatch(r"[a-z][a-z'’-]*", k)})
+ipa = {w: tok.phonemize(w, 'en-us').strip().rstrip('.') for w in words}
+ipa.update({'a': 'ə', 'the': 'ðə'})  # palabras funcionales: pronunciación débil
+open(os.path.join(root, 'ipa.js'), 'w', encoding='utf-8').write('window.IPA=' + json.dumps(ipa, ensure_ascii=False, separators=(',', ':')) + ';\n')
+print('ipa', len(ipa))

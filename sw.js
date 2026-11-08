@@ -1,5 +1,5 @@
-const V='xixo-v6';
-const ASSETS=['./','index.html','phrases.js','books.js','audio.js','manifest.webmanifest','icon-180.png','icon-192.png','icon-512.png'];
+const V='xixo-v7';
+const ASSETS=['./','index.html','phrases.js','books.js','audio.js','ipa.js','manifest.webmanifest','icon-180.png','icon-192.png','icon-512.png'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==V).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 // Safari exige respuestas 206 (Range) para audio: se sirven desde caché cortando el archivo.
