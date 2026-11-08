@@ -100,9 +100,9 @@ details.ph summary span{flex:1}details.ph summary small{display:block;font-weigh
 </head>
 <body>
 <div id="app"></div>
-<script src="phrases.js"></script>
-<script src="books.js"></script>
-<script src="audio.js"></script>
+<script src="phrases.js?v=6"></script>
+<script src="books.js?v=6"></script>
+<script src="audio.js?v=6"></script>
 <script>
 (()=>{
 const P=window.PHRASES;
@@ -163,9 +163,13 @@ function playClip(text,rate,onend,fallback){
     clip.src='audio/'+f;
     clip.playbackRate=Math.min(1.25,Math.max(.6,rate/.9));clip.preservesPitch=true;clip.webkitPreservesPitch=true;
     clip.onended=()=>{if(onend)onend()};
-    clip.onerror=()=>fallback();
+    clip.onerror=()=>{
+      if(!playClip.retried){playClip.retried=true;
+        fetch('audio.js?t='+Date.now(),{cache:'reload'}).then(r=>r.text()).then(t=>{const m=t.match(/window\.AUDIO=(\{.*\});/s);if(!m)throw 0;Object.assign(AUDIO,JSON.parse(m[1]));playClip.retried=false;if(!playClip(text,rate,onend,fallback))fallback()}).catch(()=>{playClip.retried=false;toast('No se pudo cargar el audio. Cierra la app, ábrela de nuevo y comprueba tu conexión.');fallback()});
+      }else{toast('No se pudo cargar el audio. Cierra la app y ábrela de nuevo.');fallback()}
+    };
     const p=clip.play();
-    if(p&&p.catch)p.catch(e=>{if(e&&e.name==='NotAllowedError')toast('Toca la pantalla y vuelve a intentarlo (iOS bloquea el audio hasta que tocas).');else fallback()});
+    if(p&&p.catch)p.catch(e=>{if(e&&e.name==='NotAllowedError')toast('Toca la pantalla y vuelve a intentarlo (iOS bloquea el audio hasta que tocas).');else if(!e||e.name!=='AbortError')fallback()});
     return true;
   }catch(e){return false}
 }
@@ -406,7 +410,11 @@ const EX={
 };
 
 home();
-if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
+if('serviceWorker' in navigator&&location.protocol.startsWith('http')){
+  const had=!!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{if(had&&!sessionStorage.getItem('swr')){try{sessionStorage.setItem('swr','1')}catch(e){}location.reload()}});
+  navigator.serviceWorker.register('sw.js').then(r=>r.update()).catch(()=>{});
+}
 })();
 </script>
 </body>
