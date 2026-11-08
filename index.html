@@ -102,6 +102,7 @@ details.ph summary span{flex:1}details.ph summary small{display:block;font-weigh
 <div id="app"></div>
 <script src="phrases.js"></script>
 <script src="books.js"></script>
+<script src="audio.js"></script>
 <script>
 (()=>{
 const P=window.PHRASES;
@@ -146,14 +147,33 @@ function findVoice(){
 }
 if('speechSynthesis' in window){findVoice();speechSynthesis.onvoiceschanged=findVoice}
 const SILENT='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+const clip=new Audio();clip.preload='auto';clip.setAttribute('playsinline','');
 function unlockAudio(){
   if(unlocked)return;unlocked=true;
-  try{const a=new Audio(SILENT);a.setAttribute('playsinline','');const p=a.play();if(p&&p.catch)p.catch(()=>{})}catch(e){}
+  try{if(!clip.src||clip.src.startsWith('data:')){clip.src=SILENT;const p=clip.play();if(p&&p.catch)p.catch(()=>{})}}catch(e){}
   try{const u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}catch(e){}
 }
-['touchend','click'].forEach(ev=>document.addEventListener(ev,unlockAudio,{once:true,passive:true}));
+['touchend','click'].forEach(ev=>document.addEventListener(ev,unlockAudio,{once:true,passive:true,capture:true}));
 function toast(msg){const t=h('div',{style:'position:fixed;top:calc(12px + env(safe-area-inset-top));left:16px;right:16px;max-width:608px;margin:0 auto;background:#ff4b4b;color:#fff;padding:12px 14px;border-radius:14px;font-weight:700;z-index:9'},msg);document.body.append(t);setTimeout(()=>t.remove(),5000)}
+function playClip(text,rate,onend,fallback){
+  const f=window.AUDIO&&AUDIO[text.trim().toLowerCase()];
+  if(!f)return false;
+  try{
+    clip.onended=null;clip.onerror=null;clip.pause();
+    clip.src='audio/'+f;
+    clip.playbackRate=Math.min(1.25,Math.max(.6,rate/.9));clip.preservesPitch=true;clip.webkitPreservesPitch=true;
+    clip.onended=()=>{if(onend)onend()};
+    clip.onerror=()=>fallback();
+    const p=clip.play();
+    if(p&&p.catch)p.catch(e=>{if(e&&e.name==='NotAllowedError')toast('Toca la pantalla y vuelve a intentarlo (iOS bloquea el audio hasta que tocas).');else fallback()});
+    return true;
+  }catch(e){return false}
+}
 function say(text,rate=.9,onend){
+  if(playClip(text,rate,onend,()=>speak(text,rate,onend)))return;
+  speak(text,rate,onend);
+}
+function speak(text,rate=.9,onend){
   if(!('speechSynthesis' in window)){toast('Este navegador no tiene voz. Prueba en Safari.');return}
   try{
     const ss=speechSynthesis;
@@ -186,7 +206,7 @@ function home(){
     const due=P.filter(isDue).length,fresh=P.filter(p=>!S.prog[p.id]).length,xp=todayXP();
     if(isIOS&&!standalone&&!S.hideInstall)main.append(h('div',{class:'card install'},h('b',{},'📲 Instálala en tu '+(navigator.userAgent.includes('iPad')?'iPad':'iPhone')),h('p',{},'Safari → botón Compartir ⬆️ → «Añadir a pantalla de inicio». Funciona sin internet.'),h('button',{class:'link',onclick:()=>{S.hideInstall=true;save();home()}},'Entendido')));
     const vInfo=h('small',{style:'color:var(--mut);display:block;margin-top:6px'},'Si no oyes nada: sube el volumen y quita el modo silencio (interruptor lateral del iPhone).');
-    main.append(h('div',{class:'card'},h('b',{},'🔊 Audio en inglés'),h('button',{class:'btn blue',style:'margin-top:8px',onclick:()=>{if(!('speechSynthesis' in window)){vInfo.textContent='Este navegador no soporta voz.';return}findVoice();vInfo.textContent='Voz: '+(voice?voice.name+' ('+voice.lang+')':'sin voz inglesa; instala una en Ajustes > Accesibilidad > Contenido hablado > Voces');say('Hello! Welcome to Xixo English. Can you hear me?')}},'Probar audio'),vInfo));
+    main.append(h('div',{class:'card'},h('b',{},'🔊 Audio en inglés'),h('button',{class:'btn blue',style:'margin-top:8px',onclick:()=>{vInfo.textContent='Reproduciendo un audio guardado en la app. Si no suena, sube el volumen y toca la pantalla otra vez.';say('Let me take a look.')}},'Probar audio'),vInfo));
     main.append(
       h('div',{class:'card'},h('b',{},'Meta de hoy: '+Math.min(xp,GOAL)+' / '+GOAL+' XP'),h('div',{class:'goal',style:'margin-top:8px'},h('i',{style:'width:'+Math.min(100,xp/GOAL*100)+'%'}))),
       h('button',{class:'btn',onclick:()=>startLesson(pickLesson(P),'Lección diaria')},'▶ Lección diaria',h('small',{},due+' por repasar · '+fresh+' nuevas')),
@@ -244,7 +264,7 @@ function openBook(b){
     }
   }
   function mark(i){sents.forEach((s,j)=>s.el.classList.toggle('cur',j===i));if(i>=0)sents[i].el.scrollIntoView({block:'center',behavior:'smooth'})}
-  function stop(){token++;playing=false;try{speechSynthesis.cancel()}catch(e){}btnPlay.textContent='▶ Leer';mark(-1)}
+  function stop(){token++;playing=false;try{speechSynthesis.cancel();clip.onended=null;clip.pause()}catch(e){}btnPlay.textContent='▶ Leer';mark(-1)}
   function playFrom(i,single){
     const my=++token;playing=true;btnPlay.textContent='⏸ Pausa';
     const go=k=>{
