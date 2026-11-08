@@ -137,10 +137,37 @@ function pickLesson(pool,n=6){
 }
 
 /* ---------- audio ---------- */
-let voice=null;
-function findVoice(){if(!('speechSynthesis' in window))return;const vs=speechSynthesis.getVoices();voice=vs.find(v=>/en[-_]US/i.test(v.lang)&&/samantha|ava|allison|nicky/i.test(v.name))||vs.find(v=>/en[-_]US/i.test(v.lang))||vs.find(v=>/^en/i.test(v.lang))||null}
+let voice=null,unlocked=false;
+const BAD=/albert|bad news|bahh|bells|boing|bubbles|cellos|deranged|good news|hysterical|jester|organ|superstar|trinoids|whisper|wobble|zarvox|fred|junior|kathy|ralph/i;
+function findVoice(){
+  if(!('speechSynthesis' in window))return;
+  const vs=speechSynthesis.getVoices().filter(v=>/^en/i.test(v.lang)&&!BAD.test(v.name));
+  voice=vs.find(v=>/en[-_]US/i.test(v.lang)&&/premium|enhanced/i.test(v.name))||vs.find(v=>/en[-_]US/i.test(v.lang)&&/samantha|ava|allison|nicky|zoe|evan|tom/i.test(v.name))||vs.find(v=>/en[-_]US/i.test(v.lang))||vs[0]||null;
+}
 if('speechSynthesis' in window){findVoice();speechSynthesis.onvoiceschanged=findVoice}
-function say(text,rate=.9){if(!('speechSynthesis' in window))return;try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang='en-US';if(voice)u.voice=voice;u.rate=rate;speechSynthesis.speak(u)}catch(e){}}
+const SILENT='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+function unlockAudio(){
+  if(unlocked)return;unlocked=true;
+  try{const a=new Audio(SILENT);a.setAttribute('playsinline','');const p=a.play();if(p&&p.catch)p.catch(()=>{})}catch(e){}
+  try{const u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}catch(e){}
+}
+['touchend','click'].forEach(ev=>document.addEventListener(ev,unlockAudio,{once:true,passive:true}));
+function toast(msg){const t=h('div',{style:'position:fixed;top:calc(12px + env(safe-area-inset-top));left:16px;right:16px;max-width:608px;margin:0 auto;background:#ff4b4b;color:#fff;padding:12px 14px;border-radius:14px;font-weight:700;z-index:9'},msg);document.body.append(t);setTimeout(()=>t.remove(),5000)}
+function say(text,rate=.9,onend){
+  if(!('speechSynthesis' in window)){toast('Este navegador no tiene voz. Prueba en Safari.');return}
+  try{
+    const ss=speechSynthesis;
+    if(!voice)findVoice();
+    const run=()=>{
+      const u=new SpeechSynthesisUtterance(text);u.lang='en-US';u.volume=1;u.rate=rate;if(voice)u.voice=voice;
+      if(onend)u.onend=onend;
+      u.onerror=e=>{if(e.error&&!/interrupted|canceled/.test(e.error))toast('No se pudo reproducir el audio ('+e.error+').')};
+      if(ss.paused)ss.resume();
+      ss.speak(u);
+    };
+    if(ss.speaking||ss.pending){ss.cancel();setTimeout(run,90)}else run();
+  }catch(e){toast('Error de audio: '+e.message)}
+}
 let ac;
 function beep(ok){try{ac=ac||new(window.AudioContext||window.webkitAudioContext)();const o=ac.createOscillator(),g=ac.createGain(),t=ac.currentTime;o.connect(g);g.connect(ac.destination);o.frequency.setValueAtTime(ok?660:190,t);if(ok)o.frequency.setValueAtTime(880,t+.1);g.gain.setValueAtTime(.12,t);g.gain.exponentialRampToValueAtTime(.001,t+.25);o.start(t);o.stop(t+.28)}catch(e){}}
 const spk=(text,rate=.9,label='🔊')=>h('button',{class:'ico',type:'button','aria-label':'Escuchar',onclick:()=>say(text,rate)},label);
@@ -158,6 +185,8 @@ function home(){
   if(tab==='learn'){
     const due=P.filter(isDue).length,fresh=P.filter(p=>!S.prog[p.id]).length,xp=todayXP();
     if(isIOS&&!standalone&&!S.hideInstall)main.append(h('div',{class:'card install'},h('b',{},'📲 Instálala en tu '+(navigator.userAgent.includes('iPad')?'iPad':'iPhone')),h('p',{},'Safari → botón Compartir ⬆️ → «Añadir a pantalla de inicio». Funciona sin internet.'),h('button',{class:'link',onclick:()=>{S.hideInstall=true;save();home()}},'Entendido')));
+    const vInfo=h('small',{style:'color:var(--mut);display:block;margin-top:6px'},'Si no oyes nada: sube el volumen y quita el modo silencio (interruptor lateral del iPhone).');
+    main.append(h('div',{class:'card'},h('b',{},'🔊 Audio en inglés'),h('button',{class:'btn blue',style:'margin-top:8px',onclick:()=>{if(!('speechSynthesis' in window)){vInfo.textContent='Este navegador no soporta voz.';return}findVoice();vInfo.textContent='Voz: '+(voice?voice.name+' ('+voice.lang+')':'sin voz inglesa; instala una en Ajustes > Accesibilidad > Contenido hablado > Voces');say('Hello! Welcome to Xixo English. Can you hear me?')}},'Probar audio'),vInfo));
     main.append(
       h('div',{class:'card'},h('b',{},'Meta de hoy: '+Math.min(xp,GOAL)+' / '+GOAL+' XP'),h('div',{class:'goal',style:'margin-top:8px'},h('i',{style:'width:'+Math.min(100,xp/GOAL*100)+'%'}))),
       h('button',{class:'btn',onclick:()=>startLesson(pickLesson(P),'Lección diaria')},'▶ Lección diaria',h('small',{},due+' por repasar · '+fresh+' nuevas')),
@@ -223,10 +252,7 @@ function openBook(b){
       if(k>=sents.length){stop();return}
       cur=k;mark(k);
       if(!('speechSynthesis' in window))return;
-      const u=new SpeechSynthesisUtterance(sents[k].en);u.lang='en-US';if(voice)u.voice=voice;u.rate=rate;
-      u.onend=()=>{if(my===token){if(single)stop();else setTimeout(()=>go(k+1),250)}};
-      u.onerror=()=>{};
-      speechSynthesis.cancel();speechSynthesis.speak(u);
+      say(sents[k].en,rate,()=>{if(my===token){if(single)stop();else setTimeout(()=>go(k+1),250)}});
     };
     go(i);
   }
