@@ -169,7 +169,7 @@ function playClip(text,rate,onend,fallback){
       }else{toast('No se pudo cargar el audio. Cierra la app y ábrela de nuevo.');fallback()}
     };
     const p=clip.play();
-    if(p&&p.catch)p.catch(e=>{if(e&&e.name==='NotAllowedError')toast('Toca la pantalla y vuelve a intentarlo (iOS bloquea el audio hasta que tocas).');else if(!e||e.name!=='AbortError')fallback()});
+    if(p&&p.catch)p.catch(e=>{if(e&&e.name==='NotAllowedError')toast('Toca la pantalla y vuelve a intentarlo (iOS bloquea el audio hasta que tocas).');});
     return true;
   }catch(e){return false}
 }
